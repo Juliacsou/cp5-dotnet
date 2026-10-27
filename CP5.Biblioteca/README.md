@@ -1,36 +1,222 @@
 # CP5 — Biblioteca REST API (.NET 8)
 
-Projeto da disciplina **Advanced Business Development with .NET (CP5)**, baseado nos exemplos das aulas, principalmente Controllers, UseCases, Repository, Oracle/Entity Framework Core, Swagger e autenticação JWT. Não utiliza requisitos do Challenge 2026.
+**Disciplina:** Advanced Business Development with .NET  
+**Entrega:** Checkpoint 5 (CP5)  
+**Vídeo demonstrativo:** https://youtu.be/hgwb8_ofpt0  
+**Repositório do código:** [INSERIR LINK DO REPOSITÓRIO PÚBLICO]
 
-## Abrir no Visual Studio
+## Integrantes
 
-1. Instale o SDK **.NET 8**.
-2. Abra `CP5.Biblioteca.sln` (dois cliques).
-3. Defina `CP5.API` como **Projeto de Inicialização**, se necessário.
-4. No Oracle, execute `database/oracle.sql` e `database/02_usuario.sql` **apenas se ainda não tiver criado as tabelas**.
-5. Copie `CP5.API/appsettings.Development.json.example` para `CP5.API/appsettings.Development.json`.
-6. No arquivo copiado, preencha a conexão Oracle do seu usuário e a `Secretkey` JWT (mínimo 32 bytes). Mantenha o arquivo local fora do Git.
-7. Pressione **Ctrl+F5**. O Swagger abre em `http://localhost:5080/swagger`.
+| Integrante | RM |
+|---|---|
+| Julia | RM564870 |
+| Grazielle | RM561529 |
+| Rafael | RM565572 |
+| Diego | RM566385 |
+| Vinicius | RM566230 |
 
-Exemplo de arquivo de configuração (substitua os valores):
+## 1. Sobre o projeto
+
+A **Biblioteca API** é uma aplicação REST desenvolvida em **ASP.NET Core (.NET 8)** para gerenciar livros, empréstimos e usuários. O projeto foi construído com base nos conteúdos da disciplina, utilizando Controllers, separação de camadas, Repository, UseCases, Entity Framework Core com Oracle, JWT, Swagger, Operation Result e testes com xUnit.
+
+A aplicação oferece:
+
+- Cadastro e login de usuários com perfis **leitor** e **admin**.
+- **CRUD** (criar, consultar, editar e excluir) de livros e empréstimos.
+- Controle de acesso com autenticação **JWT** e autorização por perfil.
+- Paginação estruturada e links **HATEOAS** nas consultas.
+- Integração com a API externa **ViaCEP** para consulta de endereços.
+- Tratamento de situações de erro com `OperationResult` e exceções customizadas.
+
+> **Observação acadêmica:** os endpoints de cadastro de leitor e administrador são públicos para facilitar a demonstração dos perfis no CP5. Esse formato e o armazenamento de senhas utilizado neste exercício não devem ser adotados em aplicações de produção.
+
+## 2. Tecnologias e organização
+
+**Tecnologias utilizadas:** C#, .NET 8, ASP.NET Core Web API (Controllers), Entity Framework Core, Oracle Database, Oracle Entity Framework Core, JWT Bearer, Swagger/OpenAPI, RestSharp (ViaCEP), xUnit e Moq.
+
+A solução está organizada em quatro camadas, além do projeto de testes:
+
+```text
+CP5.Biblioteca/
+├── CP5.Biblioteca.sln
+├── CP5.API/                   # Controllers, Program.cs, JWT e Swagger
+│   ├── Controllers/
+│   ├── Properties/launchSettings.json
+│   ├── appsettings.json
+│   └── appsettings.Development.json.example
+├── CP5.Application/           # DTOs e UseCases
+├── CP5.Domain/                # Entidades, interfaces e erros
+├── CP5.Infrastructure/        # DbContext, repositories e ViaCEP
+├── CP5.Tests/                 # Testes unitários xUnit / Moq
+├── database/
+│   ├── oracle.sql
+│   └── 02_usuario.sql
+└── README.md
+```
+
+**Responsabilidades por camada:**
+
+| Camada | Responsabilidade |
+|---|---|
+| Domain | Entidades `LivroEntity`, `EmprestimoEntity`, `UserEntity`, interfaces, `OperationResult<T>` e erro customizado |
+| Application | DTOs, regras de aplicação em `CadastroUseCase<T>` e `UserUseCase` |
+| Infrastructure | Acesso ao Oracle com EF Core, padrão Repository e chamada externa ao ViaCEP |
+| API | Controllers REST, configuração de dependências, autenticação, autorização e Swagger |
+| Tests | Testes unitários com xUnit e Moq, seguindo Arrange / Act / Assert |
+
+## 3. Pré-requisitos
+
+- **Visual Studio 2022 ou mais recente**, com suporte ao desenvolvimento ASP.NET Core.
+- **SDK .NET 8** instalado.
+- Acesso a um **Oracle Database** com permissão para criar tabelas, índices e colunas de identidade.
+- Um cliente SQL, como o **Oracle SQL Developer**, para executar o script de criação das tabelas.
+
+Para verificar o SDK, use:
+
+```powershell
+dotnet --list-sdks
+```
+
+## 4. Preparar o Oracle — script SQL completo
+
+Conecte-se ao Oracle com **o mesmo usuário/schema que será configurado no `appsettings.Development.json`**. Execute **todo o bloco abaixo uma única vez** em um banco/schema ainda sem as tabelas do CP5.
+
+Este bloco reúne o conteúdo dos scripts `database/oracle.sql` e `database/02_usuario.sql`, que também estão separados no projeto. As tabelas devem ser criadas em ordem, pois `CP5_EMPRESTIMO` possui uma chave estrangeira para `CP5_LIVRO`.
+
+```sql
+-- ============================================================
+-- CP5 BIBLIOTECA — SCRIPT DE CRIACAO DO BANCO ORACLE
+-- Executar uma vez, no schema utilizado pela API.
+-- ============================================================
+
+-- LIVROS
+CREATE TABLE CP5_LIVRO (
+    ID NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
+    TITULO NVARCHAR2(150) NOT NULL,
+    AUTOR NVARCHAR2(120) NOT NULL,
+    ANOPUBLICACAO NUMBER(10) NOT NULL
+);
+
+CREATE INDEX IDX_CP5_LIVRO_TITULO ON CP5_LIVRO(TITULO);
+
+-- EMPRESTIMOS
+CREATE TABLE CP5_EMPRESTIMO (
+    ID NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
+    LIVROID NUMBER(10) NOT NULL,
+    LEITOR NVARCHAR2(120) NOT NULL,
+    DATAEMPRESTIMO TIMESTAMP(7) NOT NULL,
+    DATADEVOLUCAO TIMESTAMP(7),
+    CONSTRAINT FK_CP5_EMPRESTIMO_LIVRO
+        FOREIGN KEY (LIVROID) REFERENCES CP5_LIVRO(ID)
+);
+
+CREATE INDEX IDX_CP5_EMP_LIVRO ON CP5_EMPRESTIMO(LIVROID);
+
+-- USUARIOS (LEITOR / ADMIN)
+CREATE TABLE CP5_USUARIO (
+    ID NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
+    NOME NVARCHAR2(120) NOT NULL,
+    EMAIL NVARCHAR2(160) NOT NULL,
+    PASSWORD NVARCHAR2(120) NOT NULL,
+    ROLE NVARCHAR2(20) DEFAULT 'leitor' NOT NULL,
+    CONSTRAINT UK_CP5_USUARIO_EMAIL UNIQUE (EMAIL)
+);
+```
+
+**Atenção:** se as tabelas já existirem, **não execute novamente** as instruções `CREATE TABLE`/`CREATE INDEX`, pois o Oracle informará que os objetos já existem. Não é necessário inserir usuários manualmente: eles serão criados pelo Swagger.
+
+Para conferir as tabelas após executar o script:
+
+```sql
+SELECT TABLE_NAME
+FROM USER_TABLES
+WHERE TABLE_NAME IN ('CP5_LIVRO', 'CP5_EMPRESTIMO', 'CP5_USUARIO')
+ORDER BY TABLE_NAME;
+```
+
+Devem aparecer **três tabelas**.
+
+## 5. Configurar o appsettings
+
+Na pasta `CP5.API`, faça uma cópia de:
+
+```text
+appsettings.Development.json.example
+```
+
+Renomeie a cópia para:
+
+```text
+appsettings.Development.json
+```
+
+Edite o arquivo copiado e configure os dados **do seu próprio Oracle** e uma chave JWT com pelo menos 32 bytes:
 
 ```json
 {
-  "Logging": { "LogLevel": { "Default": "Information", "Microsoft.AspNetCore": "Warning" } },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
   "ConnectionStrings": {
     "Oracle": "Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=oracle.fiap.com.br)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SID=ORCL)));User Id=SEU_USUARIO;Password=SUA_SENHA;"
   },
-  "Secretkey": "SUBSTITUA_POR_UMA_CHAVE_JWT_DE_32_CARACTERES_OU_MAIS"
+  "Secretkey": "SUBSTITUA_POR_UMA_CHAVE_JWT_COM_32_CARACTERES_OU_MAIS"
 }
 ```
 
-**Importante:** `appsettings.Development.json` está no `.gitignore`, pois contém credenciais. A chave JWT é necessária para o login e para testar endpoints protegidos, mas **não** é necessária para cadastrar usuários.
+Substitua `SEU_USUARIO` e `SUA_SENHA` por suas credenciais. Verifique também `HOST`, `PORT` e `SID` de acordo com a conexão do seu Oracle. A configuração acima é apenas um **modelo de conexão**.
 
-## Testar pelo Swagger — fluxo simples
+O projeto utiliza `OracleSQLCompatibility.DatabaseVersion19` para gerar SQL compatível com o Oracle utilizado nas aulas. O `appsettings.Development.json` está no `.gitignore`, para que credenciais locais **não sejam enviadas ao GitHub**.
 
-### 1. Criar administrador (sem token)
+## 6. Executar a aplicação
 
-**POST `/api/auth/registrar-admin`**
+1. Abra `CP5.Biblioteca.sln` com dois cliques no Visual Studio.
+2. Caso necessário, clique com o botão direito em `CP5.API` e selecione **Definir como Projeto de Inicialização**.
+3. Confirme que o ambiente de inicialização é `Development` (definido em `CP5.API/Properties/launchSettings.json`).
+4. Execute com **Ctrl + F5** ou pelo botão de execução do Visual Studio.
+5. O navegador deverá abrir o **Swagger** em: **http://localhost:5080/swagger**.
+
+Também é possível executar pelo terminal, na pasta da solução:
+
+```powershell
+dotnet restore CP5.API/CP5.API.csproj
+dotnet build CP5.API/CP5.API.csproj
+dotnet run --project CP5.API
+```
+
+O arquivo `launchSettings.json` já configura o ambiente `Development` e a porta **5080** para a execução local.
+
+## 7. Endpoints disponíveis
+
+| Método | Endpoint | Função | Acesso |
+|---|---|---|---|
+| POST | `/api/auth/registrar` | Cadastrar leitor | Público |
+| POST | `/api/auth/registrar-admin` | Cadastrar administrador | Público (CP5) |
+| POST | `/api/auth` | Login e obtenção do JWT | Público |
+| GET | `/api/livros` | Listar livros com paginação | Autenticado |
+| GET | `/api/livros/{id}` | Consultar livro e links HATEOAS | Autenticado |
+| POST | `/api/livros` | Cadastrar livro | Admin |
+| PUT | `/api/livros/{id}` | Atualizar livro | Admin |
+| DELETE | `/api/livros/{id}` | Excluir livro | Admin |
+| GET | `/api/emprestimos` | Listar empréstimos com paginação | Autenticado |
+| GET | `/api/emprestimos/{id}` | Consultar empréstimo e links HATEOAS | Autenticado |
+| POST | `/api/emprestimos` | Cadastrar empréstimo | Admin |
+| PUT | `/api/emprestimos/{id}` | Atualizar empréstimo | Admin |
+| DELETE | `/api/emprestimos/{id}` | Excluir empréstimo | Admin |
+| GET | `/api/endereco/{cep}` | Consultar CEP no ViaCEP | Autenticado |
+
+Nos endpoints de listagem, os parâmetros são `pagina` e `tamanho` (por padrão `1` e `10`; tamanho máximo `100`).
+
+## 8. Roteiro de testes pelo Swagger
+
+O roteiro abaixo permite ao professor testar os principais recursos **sem editar permissões diretamente no banco**.
+
+### Passo 1 — Criar um administrador
+
+Em `POST /api/auth/registrar-admin`, clique em **Try it out** e envie:
 
 ```json
 {
@@ -40,11 +226,11 @@ Exemplo de arquivo de configuração (substitua os valores):
 }
 ```
 
-Resposta esperada: **200 OK**, `role: "admin"`. Não exige JWT nem chave de instalação.
+**Esperado:** HTTP `200 OK`, com `role: "admin"`. Não requer token.
 
-### 2. Criar leitor (sem token)
+### Passo 2 — Criar um leitor
 
-**POST `/api/auth/registrar`**
+Em `POST /api/auth/registrar`, envie:
 
 ```json
 {
@@ -54,11 +240,11 @@ Resposta esperada: **200 OK**, `role: "admin"`. Não exige JWT nem chave de inst
 }
 ```
 
-Resposta esperada: **200 OK**, `role: "leitor"`.
+**Esperado:** HTTP `200 OK`, com `role: "leitor"`.
 
-### 3. Fazer login com Joao
+### Passo 3 — Login e autorização JWT
 
-**POST `/api/auth`**
+Em `POST /api/auth`, informe os dados do administrador:
 
 ```json
 {
@@ -67,11 +253,11 @@ Resposta esperada: **200 OK**, `role: "leitor"`.
 }
 ```
 
-Copie o campo `jwt` da resposta, clique em **Authorize** no Swagger e cole o token (sem prefixar `Bearer`).
+**Esperado:** HTTP `200 OK` e um campo `jwt`. Copie o token, clique em **Authorize** no canto superior direito do Swagger e cole **somente o token** (sem escrever `Bearer`).
 
-### 4. Cadastrar livro
+### Passo 4 — Cadastrar e consultar um livro
 
-**POST `/api/livros`** com o JWT de Joao (admin):
+Em `POST /api/livros`, envie:
 
 ```json
 {
@@ -82,47 +268,100 @@ Copie o campo `jwt` da resposta, clique em **Authorize** no Swagger e cole o tok
 }
 ```
 
-Depois confira o registro no Oracle:
+**Esperado:** HTTP `201 Created`. Anote o `id` gerado.
+
+Depois use `GET /api/livros?pagina=1&tamanho=10` e `GET /api/livros/{id}`. Nas respostas, confira os metadados de paginação e os links HATEOAS (`self`, `next`/`previous` quando aplicáveis, e links do recurso individual).
+
+Para confirmar a persistência no Oracle:
 
 ```sql
-SELECT ID, NOME, EMAIL, ROLE FROM CP5_USUARIO;
+SELECT * FROM CP5_USUARIO;
 SELECT * FROM CP5_LIVRO;
 ```
 
-**Teste de autorização:** ao fazer login com Ana (leitor) e tentar `POST /api/livros`, a API deve retornar **403 Forbidden**. Sem JWT, os endpoints protegidos devem retornar **401 Unauthorized**. A criação pública de admin é uma simplificação **somente para o exercício acadêmico**, não uma prática adequada para produção.
+### Passo 5 — Alterar e excluir livro
 
-## Endpoints
+Use `PUT /api/livros/{id}` (substituindo `{id}` pelo ID criado):
 
-- `POST /api/auth/registrar` — cria leitor, público.
-- `POST /api/auth/registrar-admin` — cria administrador, público.
-- `POST /api/auth` — login com JWT.
-- `GET/POST/PUT/DELETE /api/livros` — CRUD de livros; leitura/alteração conforme perfil.
-- `GET/POST/PUT/DELETE /api/emprestimos` — CRUD de empréstimos; leitura/alteração conforme perfil.
-- `GET /api/endereco/{cep}` — serviço externo ViaCEP.
+```json
+{
+  "id": 0,
+  "titulo": "Dom Casmurro - Edicao Revisada",
+  "autor": "Machado de Assis",
+  "anoPublicacao": 1899
+}
+```
 
-As consultas usam paginação e links HATEOAS.
+**Esperado:** HTTP `200 OK`. O ID no corpo será ajustado pela API de acordo com o ID da rota.
 
-## Arquitetura e conceitos
+Para testar exclusão, use `DELETE /api/livros/{id}` **depois** de concluir os testes com empréstimos vinculados a esse livro.
 
-- `CP5.Domain`: entidades, interfaces e `OperationResult`.
-- `CP5.Application`: DTOs e UseCases.
-- `CP5.Infrastructure`: EF Core/Oracle, Repository e ViaCEP via RestSharp.
-- `CP5.API`: Controllers, JWT, Swagger e autorização por perfil.
-- `CP5.Tests`: testes xUnit/Moq com padrão Arrange, Act, Assert.
+### Passo 6 — Cadastrar e consultar empréstimo
 
-A aplicação usa `OracleSQLCompatibility.DatabaseVersion19` para compatibilidade com o Oracle da FIAP e atributos `[Table]`/`[Column]` que mapeiam o modelo C# para os nomes das colunas Oracle.
+Com um livro existente, use `POST /api/emprestimos` e substitua `livroId` pelo ID retornado no cadastro do livro:
 
-## Compilar e executar testes
+```json
+{
+  "id": 0,
+  "livroId": 1,
+  "leitor": "Ana",
+  "dataEmprestimo": "2026-10-27T10:00:00",
+  "dataDevolucao": null,
+  "livro": null
+}
+```
+
+**Esperado:** HTTP `201 Created` se `livroId` existir. Depois teste `GET`, `PUT` e `DELETE` de empréstimos. Exclua o empréstimo **antes do livro** para respeitar a chave estrangeira.
+
+Confirmação no Oracle:
+
+```sql
+SELECT * FROM CP5_EMPRESTIMO;
+```
+
+### Passo 7 — Serviço externo ViaCEP
+
+Com JWT válido, execute `GET /api/endereco/01001000`.
+
+**Esperado:** HTTP `200 OK` e os dados de endereço recebidos do ViaCEP. Com CEP em formato inválido, como `123`, a API retorna `400 Bad Request`.
+
+### Passo 8 — Autenticação, autorização e erros
+
+- **Sem JWT:** tente `GET /api/livros` e verifique `401 Unauthorized`.
+- **Com JWT de leitor:** faça login como Ana, atualize o **Authorize**, tente `POST /api/livros` e verifique `403 Forbidden`.
+- **Com JWT de admin:** faça login novamente como João e teste o cadastro de livro, que deve ser permitido.
+- **Registro inexistente:** tente `GET /api/livros/999999` e verifique `404 Not Found`.
+- **E-mail já utilizado:** tente cadastrar novamente um e-mail existente e verifique `409 Conflict`.
+
+## 9. Conceitos implementados no CP5
+
+| Conteúdo | Aplicação no projeto |
+|---|---|
+| Clean Architecture | Separação entre Domain, Application, Infrastructure e API |
+| Repository | Acesso aos dados Oracle com repositórios e interfaces |
+| Otimização | Consultas `AsNoTracking()`, índices Oracle e paginação com `Skip`/`Take` |
+| Operation Result | `OperationResult<T>` com sucesso, erro e status HTTP |
+| Erros customizados | `NoContentException` e tratamento nas camadas de aplicação/API |
+| Serviços externos | ViaCEP consumido via RestSharp |
+| PageResult | `PageResponseDto<T>` com registros, página, tamanho e totais |
+| HATEOAS | Links de navegação em listagens e consultas individuais |
+| Autenticação / autorização | JWT com perfis `admin` e `leitor` |
+| Testes automatizados | Testes unitários com xUnit, Moq e padrão AAA |
+
+## 10. Executar os testes automatizados
+
+No terminal, na raiz da solução:
 
 ```powershell
-dotnet build CP5.API/CP5.API.csproj
 dotnet test CP5.Tests/CP5.Tests.csproj
 ```
 
-A compilação e execução dos testes precisam ser confirmadas no Visual Studio com .NET 8; os testes funcionais/de integração ainda precisam ser complementados para atender integralmente ao CP5.
+O projeto `CP5.Tests` possui testes unitários para cadastro e consulta, respostas HTTP, paginação/HATEOAS e criação de perfis de usuário. Os testes utilizam **Moq**, portanto não necessitam conectar ao Oracle.
 
-## Entrega
+**Limitação da versão entregue:** os testes funcionais/de integração com chamadas HTTP reais e banco Oracle ainda não estão implementados na suíte de testes. Os fluxos HTTP devem ser demonstrados manualmente pelo Swagger. Não se deve confundir essa demonstração manual com testes de integração automatizados.
 
-- Repositório público: [INSERIR LINK]
-- Vídeo de demonstração (máximo de 5 minutos): [INSERIR LINK]
-- Integrantes e RMs: [PREENCHER]
+## 11. Vídeo de demonstração
+
+**Assista à demonstração do projeto:** https://youtu.be/hgwb8_ofpt0
+
+O vídeo integra a entrega do CP5 e apresenta a execução prática da aplicação.
