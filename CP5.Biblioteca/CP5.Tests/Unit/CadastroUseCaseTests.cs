@@ -3,7 +3,7 @@ using CP5.Domain.Entities;
 using CP5.Domain.Interfaces;
 using Moq;
 using Xunit;
-namespace CP5.Tests;
+namespace CP5.Tests.Unit;
 public class CadastroUseCaseTests
 {
  [Fact] public async Task ObterAsync_RegistroInexistente_Retorna404()

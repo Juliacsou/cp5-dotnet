@@ -19,19 +19,19 @@ public class UserUseCase
         _configuration = configuration;
     }
 
-    // O cadastro anonimo nao recebe o perfil: sempre cria leitor.
-    public async Task<UserEntity?> AdicionarAsync(string nome, string email, string senha)
+    // Cadastro público de leitor (simplificação acadêmica aprovada para o CP5).
+    public Task<OperationResult<UserEntity>> AdicionarAsync(string nome, string email, string senha)
     {
-        return await _repository.AdicionarAsync(new UserEntity
+        return _repository.AdicionarAsync(new UserEntity
         {
             Nome = nome, Email = email, Password = senha, Role = "leitor"
         });
     }
 
-    // Cadastro de administrador via endpoint publico (exercicio academico).
-    public async Task<UserEntity?> AdicionarAdminAsync(string nome, string email, string senha)
+    // Cadastro público de admin: mesmo formato do cadastro de leitor, sem chave.
+    public Task<OperationResult<UserEntity>> AdicionarAdminAsync(string nome, string email, string senha)
     {
-        return await _repository.AdicionarAsync(new UserEntity
+        return _repository.AdicionarAsync(new UserEntity
         {
             Nome = nome, Email = email, Password = senha, Role = "admin"
         });

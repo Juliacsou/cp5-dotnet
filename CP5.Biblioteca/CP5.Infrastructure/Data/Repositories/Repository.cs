@@ -14,7 +14,7 @@ public class Repository<T>:IRepository<T> where T:class
  }
  public async Task<T?> ObterAsync(int id)=>await Context.Set<T>().AsNoTracking().FirstOrDefaultAsync(x=>EF.Property<int>(x,"Id")==id);
  public virtual async Task<T> AdicionarAsync(T entity){Context.Set<T>().Add(entity);await Context.SaveChangesAsync();return entity;}
- public async Task<T> EditarAsync(T entity)
+ public virtual async Task<T> EditarAsync(T entity)
  {
   int id=(int)(typeof(T).GetProperty("Id")?.GetValue(entity)??0);
   var antigo=await Context.Set<T>().FindAsync(id);
@@ -37,5 +37,12 @@ public class EmprestimoRepository:Repository<EmprestimoEntity>,IEmprestimoReposi
  {
   if(!await Context.Livros.AnyAsync(x=>x.Id==value.LivroId))throw new NoContentException("Livro informado não existe.");
   return await base.AdicionarAsync(value);
+ }
+
+ public override async Task<EmprestimoEntity> EditarAsync(EmprestimoEntity value)
+ {
+  if (!await Context.Livros.AsNoTracking().AnyAsync(x => x.Id == value.LivroId))
+   throw new NoContentException("Livro informado não existe.");
+  return await base.EditarAsync(value);
  }
 }

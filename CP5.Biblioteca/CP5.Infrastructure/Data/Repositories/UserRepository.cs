@@ -9,16 +9,18 @@ public class UserRepository : IUserRepository
     private readonly ApplicationContext _context;
     public UserRepository(ApplicationContext context) => _context = context;
 
-    public async Task<UserEntity?> AdicionarAsync(UserEntity entity)
+    public async Task<OperationResult<UserEntity>> AdicionarAsync(UserEntity entity)
     {
-        if (await _context.Set<UserEntity>().AnyAsync(u => u.Email == entity.Email)) return null;
-        _context.Set<UserEntity>().Add(entity);
+        // Exemplo de erro retornado pelo Repository, sem lançar exceção.
+        if (await _context.Usuarios.AsNoTracking().AnyAsync(u => u.Email == entity.Email))
+            return OperationResult<UserEntity>.Failure("Email ja cadastrado.", 409);
+
+        _context.Usuarios.Add(entity);
         await _context.SaveChangesAsync();
-        return entity;
+        return OperationResult<UserEntity>.Success(entity, 201);
     }
 
     public async Task<UserEntity?> AutenticarAsync(string email, string senha) =>
-        await _context.Set<UserEntity>().AsNoTracking()
+        await _context.Usuarios.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Email == email && u.Password == senha);
-
 }

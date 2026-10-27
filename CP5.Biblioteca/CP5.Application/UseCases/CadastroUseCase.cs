@@ -22,6 +22,7 @@ public class CadastroUseCase<T> where T:class
  }
  public async Task<OperationResult<RecursoDto<T>>> ObterAsync(int id,string baseUrl)
  {
+  if(id < 1)return OperationResult<RecursoDto<T>>.Failure("Informe um ID válido.",400);
   try {
    var value=await _repository.ObterAsync(id);
    if(value==null)return OperationResult<RecursoDto<T>>.Failure("Registro não encontrado.",404);
@@ -42,6 +43,7 @@ public class CadastroUseCase<T> where T:class
  }
  public async Task<OperationResult<string>> RemoverAsync(int id)
  {
+  if(id < 1)return OperationResult<string>.Failure("Informe um ID válido.",400);
   try {await _repository.RemoverAsync(id);return OperationResult<string>.Success("Registro excluído.");}
   catch(NoContentException e){return OperationResult<string>.Failure(e.Message,404);}
   catch(Exception){return OperationResult<string>.Failure("Erro ao excluir.",500);}

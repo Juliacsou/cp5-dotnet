@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using CP5.Application.UseCases;
+using CP5.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,31 +15,30 @@ public class AuthController : ControllerBase
 {
     private readonly UserUseCase _useCase;
 
-    public AuthController(UserUseCase useCase)
-    {
-        _useCase = useCase;
-    }
+    public AuthController(UserUseCase useCase) => _useCase = useCase;
 
-    // Cadastro publico de leitor, como ensinado na aula.
     [HttpPost("registrar")]
     [AllowAnonymous]
     public async Task<IActionResult> Registrar(PostUserDto dto)
     {
         if (dto.Password.Length < 6) return BadRequest("A senha precisa ter pelo menos 6 caracteres.");
-        var usuario = await _useCase.AdicionarAsync(dto.Nome, dto.Email, dto.Password);
-        if (usuario is null) return Conflict("Email ja cadastrado.");
-        return Ok(new { usuario.Id, usuario.Nome, usuario.Email, usuario.Role });
+        return RespostaCadastro(await _useCase.AdicionarAsync(dto.Nome, dto.Email, dto.Password));
     }
 
-    // Cadastro publico de administrador para demonstracao academica do CP5.
-    // Nao exige JWT ou chave de instalacao.
+    // Endpoint público de administrador solicitado para o exercício acadêmico.
     [HttpPost("registrar-admin")]
     [AllowAnonymous]
     public async Task<IActionResult> RegistrarAdmin(PostUserDto dto)
     {
         if (dto.Password.Length < 6) return BadRequest("A senha precisa ter pelo menos 6 caracteres.");
-        var usuario = await _useCase.AdicionarAdminAsync(dto.Nome, dto.Email, dto.Password);
-        if (usuario is null) return Conflict("Email ja cadastrado.");
+        return RespostaCadastro(await _useCase.AdicionarAdminAsync(dto.Nome, dto.Email, dto.Password));
+    }
+
+    private IActionResult RespostaCadastro(OperationResult<UserEntity> resultado)
+    {
+        if (!resultado.IsSuccess) return StatusCode(resultado.StatusCode, resultado.Error);
+        var usuario = resultado.Value!;
+        // Mantém HTTP 200 para não alterar o fluxo já demonstrado no Swagger.
         return Ok(new { usuario.Id, usuario.Nome, usuario.Email, usuario.Role });
     }
 

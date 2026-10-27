@@ -3,7 +3,7 @@
 **Disciplina:** Advanced Business Development with .NET  
 **Entrega:** Checkpoint 5 (CP5)  
 **Vídeo demonstrativo:** https://youtu.be/hgwb8_ofpt0  
-**Repositório do código:** [INSERIR LINK DO REPOSITÓRIO PÚBLICO]
+**Repositório do código:** https://github.com/Juliacsou/cp5-dotnet.git
 
 ## Integrantes
 
@@ -14,6 +14,8 @@
 | Rafael | RM565572 |
 | Diego | RM566385 |
 | Vinicius | RM566230 |
+
+> **Antes de enviar ao portal:** completar os sobrenomes dos cinco integrantes e inserir o link do repositório público. Os nomes acima foram informados sem sobrenomes; não foram inventados.
 
 ## 1. Sobre o projeto
 
@@ -26,7 +28,8 @@ A aplicação oferece:
 - Controle de acesso com autenticação **JWT** e autorização por perfil.
 - Paginação estruturada e links **HATEOAS** nas consultas.
 - Integração com a API externa **ViaCEP** para consulta de endereços.
-- Tratamento de situações de erro com `OperationResult` e exceções customizadas.
+- Tratamento de erros por retorno do Repository (`OperationResult`) e por exceção customizada (`NoContentException`).
+- Diferenciação de CEP inexistente (404) e ViaCEP indisponível (503), com timeout de 10 segundos.
 
 > **Observação acadêmica:** os endpoints de cadastro de leitor e administrador são públicos para facilitar a demonstração dos perfis no CP5. Esse formato e o armazenamento de senhas utilizado neste exercício não devem ser adotados em aplicações de produção.
 
@@ -47,7 +50,9 @@ CP5.Biblioteca/
 ├── CP5.Application/           # DTOs e UseCases
 ├── CP5.Domain/                # Entidades, interfaces e erros
 ├── CP5.Infrastructure/        # DbContext, repositories e ViaCEP
-├── CP5.Tests/                 # Testes unitários xUnit / Moq
+├── CP5.Tests/                 # xUnit, Moq e WebApplicationFactory
+│   ├── Unit/                  # Testes isolados de UseCases e Controller
+│   └── Integration/           # Testes HTTP reais usando o mesmo Oracle
 ├── database/
 │   ├── oracle.sql
 │   └── 02_usuario.sql
@@ -62,7 +67,7 @@ CP5.Biblioteca/
 | Application | DTOs, regras de aplicação em `CadastroUseCase<T>` e `UserUseCase` |
 | Infrastructure | Acesso ao Oracle com EF Core, padrão Repository e chamada externa ao ViaCEP |
 | API | Controllers REST, configuração de dependências, autenticação, autorização e Swagger |
-| Tests | Testes unitários com xUnit e Moq, seguindo Arrange / Act / Assert |
+| Tests | Testes unitários com xUnit/Moq e funcionais com WebApplicationFactory e Oracle, seguindo Arrange / Act / Assert |
 
 ## 3. Pré-requisitos
 
@@ -70,6 +75,7 @@ CP5.Biblioteca/
 - **SDK .NET 8** instalado.
 - Acesso a um **Oracle Database** com permissão para criar tabelas, índices e colunas de identidade.
 - Um cliente SQL, como o **Oracle SQL Developer**, para executar o script de criação das tabelas.
+- Conexão Oracle acessível também durante a execução de `dotnet test` (os testes de integração usam o banco real).
 
 Para verificar o SDK, use:
 
@@ -138,7 +144,7 @@ Devem aparecer **três tabelas**.
 
 ## 5. Configurar o appsettings
 
-Na pasta `CP5.API`, faça uma cópia de:
+Na pasta `CP5.API`, faça uma cópia de (o arquivo existe nesta versão):
 
 ```text
 appsettings.Development.json.example
@@ -169,7 +175,9 @@ Edite o arquivo copiado e configure os dados **do seu próprio Oracle** e uma ch
 
 Substitua `SEU_USUARIO` e `SUA_SENHA` por suas credenciais. Verifique também `HOST`, `PORT` e `SID` de acordo com a conexão do seu Oracle. A configuração acima é apenas um **modelo de conexão**.
 
-O projeto utiliza `OracleSQLCompatibility.DatabaseVersion19` para gerar SQL compatível com o Oracle utilizado nas aulas. O `appsettings.Development.json` está no `.gitignore`, para que credenciais locais **não sejam enviadas ao GitHub**.
+O projeto utiliza `OracleSQLCompatibility.DatabaseVersion19` para gerar SQL compatível com o Oracle utilizado nas aulas. O `appsettings.Development.json` está no `.gitignore` para não ser enviado ao GitHub.
+
+**Observação sobre o ZIP:** o arquivo local `appsettings.Development.json` foi mantido nesta entrega com os dados de exemplo, conforme solicitado pelo grupo. Ele não é necessário no repositório público: publique somente o `.example`, e peça a quem for testar para criar a cópia local com as credenciais do próprio Oracle. Confirme que a conexão está válida antes de executar a API ou os testes de integração.
 
 ## 6. Executar a aplicação
 
@@ -341,27 +349,61 @@ Com JWT válido, execute `GET /api/endereco/01001000`.
 | Repository | Acesso aos dados Oracle com repositórios e interfaces |
 | Otimização | Consultas `AsNoTracking()`, índices Oracle e paginação com `Skip`/`Take` |
 | Operation Result | `OperationResult<T>` com sucesso, erro e status HTTP |
-| Erros customizados | `NoContentException` e tratamento nas camadas de aplicação/API |
-| Serviços externos | ViaCEP consumido via RestSharp |
+| Erros customizados | `NoContentException` lançada no Repository e erro estruturado retornado pelo UserRepository |
+| Serviços externos | ViaCEP com RestSharp, timeout e status distintos: 400 (formato), 404 (CEP inexistente) e 503 (falha externa) |
 | PageResult | `PageResponseDto<T>` com registros, página, tamanho e totais |
 | HATEOAS | Links de navegação em listagens e consultas individuais |
 | Autenticação / autorização | JWT com perfis `admin` e `leitor` |
-| Testes automatizados | Testes unitários com xUnit, Moq e padrão AAA |
+| Testes automatizados | Testes unitários com xUnit/Moq e testes HTTP com WebApplicationFactory, usando o Oracle da API |
 
 ## 10. Executar os testes automatizados
 
-No terminal, na raiz da solução:
+O projeto está dividido em **testes unitários** (`CP5.Tests/Unit`) e **testes de integração** (`CP5.Tests/Integration`). Todos seguem o padrão AAA (Arrange, Act, Assert) apresentado na disciplina.
+
+- **Unitários:** testam `OperationResult`, regras de cadastro, perfis, erros customizados e tratamento de respostas do ViaCEP com Moq. Não exigem conexão ao banco.
+- **Integração:** utilizam `WebApplicationFactory<Program>` para fazer chamadas HTTP aos Controllers reais, com o **mesmo banco Oracle da aplicação** (nenhum SQLite, InMemory ou banco substituto). Testam 401, 403, 404, 409, CRUD de livros e empréstimos, persistência, PageResult e HATEOAS. Os registros criados pelos testes têm identificadores únicos e são removidos ao final.
+
+### Antes dos testes de integração
+
+1. Execute o SQL da seção 4 no Oracle do ambiente de teste, caso ainda não existam as três tabelas.
+2. Preencha `CP5.API/appsettings.Development.json` com a conexão Oracle correta e a `Secretkey` de 32 caracteres ou mais.
+3. Confirme que o Oracle está acessível e que você tem permissão para `SELECT`, `INSERT`, `UPDATE` e `DELETE` nas tabelas.
+4. Evite executar testes de integração em um banco com dados importantes: embora removam os próprios registros, são testes com escritas reais.
+
+Na pasta da solução, execute **todos** os testes:
 
 ```powershell
 dotnet test CP5.Tests/CP5.Tests.csproj
 ```
 
-O projeto `CP5.Tests` possui testes unitários para cadastro e consulta, respostas HTTP, paginação/HATEOAS e criação de perfis de usuário. Os testes utilizam **Moq**, portanto não necessitam conectar ao Oracle.
+Para rodar apenas os unitários, sem precisar do Oracle:
 
-**Limitação da versão entregue:** os testes funcionais/de integração com chamadas HTTP reais e banco Oracle ainda não estão implementados na suíte de testes. Os fluxos HTTP devem ser demonstrados manualmente pelo Swagger. Não se deve confundir essa demonstração manual com testes de integração automatizados.
+```powershell
+dotnet test CP5.Tests/CP5.Tests.csproj --filter FullyQualifiedName~CP5.Tests.Unit
+```
+
+Para rodar somente os de integração (Oracle precisa estar configurado):
+
+```powershell
+dotnet test CP5.Tests/CP5.Tests.csproj --filter FullyQualifiedName~CP5.Tests.Integration
+```
+
+O Visual Studio também permite executar pelo menu **Teste → Gerenciador de Testes**. O resultado da compilação e dos testes deve ser confirmado na máquina do grupo antes da entrega.
 
 ## 11. Vídeo de demonstração
 
 **Assista à demonstração do projeto:** https://youtu.be/hgwb8_ofpt0
 
 O vídeo integra a entrega do CP5 e apresenta a execução prática da aplicação.
+
+## 12. Organização e checklist de entrega
+
+- Abrir `CP5.Biblioteca.sln` no Visual Studio e executar a API no Swagger.
+- Validar `dotnet build CP5.Biblioteca.sln` e `dotnet test CP5.Tests/CP5.Tests.csproj` com a conexão Oracle funcional.
+- Não enviar `.vs/`, `bin/`, `obj/` e `TestResults/` ao GitHub; esses diretórios estão no `.gitignore`.
+- Antes do commit, conferir que `CP5.API/appsettings.Development.json` **não** aparece no `git status`. O arquivo `.example` deve aparecer.
+- Inserir a URL pública do repositório na primeira seção deste README.
+- Completar os **nomes completos** dos integrantes e preencher o arquivo `ENTREGA_CP5_MODELO.txt` com os dados reais.
+- Entregar no portal um arquivo `.TXT` contendo o repositório público, o vídeo e os nomes completos/RMs de todos os integrantes, conforme o enunciado do CP5.
+
+**Nota acadêmica:** os cadastros públicos de administradores e o armazenamento de senha em texto foram mantidos para preservar o exercício e o estilo já utilizado no CP5. Não são adequados para uma aplicação em produção.
