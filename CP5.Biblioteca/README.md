@@ -1,50 +1,128 @@
 # CP5 — Biblioteca REST API (.NET 8)
 
-Projeto exclusivamente do CP5, fundamentado no material de aula do professor, especialmente a Aula 08 (UserEntity, UserRepository, UserUseCase, JWT e HATEOAS). Não utiliza requisitos do Challenge 2026.
+Projeto da disciplina **Advanced Business Development with .NET (CP5)**, baseado nos exemplos das aulas, principalmente Controllers, UseCases, Repository, Oracle/Entity Framework Core, Swagger e autenticação JWT. Não utiliza requisitos do Challenge 2026.
 
-## Preparação no Visual Studio
+## Abrir no Visual Studio
 
-1. Instale o **SDK .NET 8**. Abra `CP5.Biblioteca.sln` com dois cliques no Visual Studio. Configure `CP5.API` como projeto de inicialização (botão direito > Definir como Projeto de Inicialização) e utilize o perfil `CP5.API` para iniciar com F5 ou Ctrl+F5. O navegador abrirá `/swagger` automaticamente.
-2. Você já executou `database/oracle.sql`? **Não execute novamente**. Execute apenas `database/02_usuario.sql` no mesmo schema Oracle.
-3. Em `CP5.API`, **copie** `appsettings.Development.json.example` para `appsettings.Development.json`. Edite o arquivo com a mesma conexão Oracle do SQL Developer e uma `Secretkey` longa (mínimo 32 caracteres). O `.gitignore` impede o versionamento do arquivo com a senha.
-4. Execute:
+1. Instale o SDK **.NET 8**.
+2. Abra `CP5.Biblioteca.sln` (dois cliques).
+3. Defina `CP5.API` como **Projeto de Inicialização**, se necessário.
+4. No Oracle, execute `database/oracle.sql` e `database/02_usuario.sql` **apenas se ainda não tiver criado as tabelas**.
+5. Copie `CP5.API/appsettings.Development.json.example` para `CP5.API/appsettings.Development.json`.
+6. No arquivo copiado, preencha a conexão Oracle do seu usuário e a `Secretkey` JWT (mínimo 32 bytes). Mantenha o arquivo local fora do Git.
+7. Pressione **Ctrl+F5**. O Swagger abre em `http://localhost:5080/swagger`.
 
-```powershell
-dotnet restore CP5.API/CP5.API.csproj
-dotnet build CP5.API/CP5.API.csproj
-dotnet run --project CP5.API
+Exemplo de arquivo de configuração (substitua os valores):
+
+```json
+{
+  "Logging": { "LogLevel": { "Default": "Information", "Microsoft.AspNetCore": "Warning" } },
+  "ConnectionStrings": {
+    "Oracle": "Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=oracle.fiap.com.br)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SID=ORCL)));User Id=SEU_USUARIO;Password=SUA_SENHA;"
+  },
+  "Secretkey": "SUBSTITUA_POR_UMA_CHAVE_JWT_DE_32_CARACTERES_OU_MAIS"
+}
 ```
 
-5. O perfil `CP5.API/Properties/launchSettings.json` define o ambiente `Development`, a porta `5080` e a abertura automática de `/swagger` pelo Visual Studio. O comando `dotnet run --project CP5.API` também usa o perfil de inicialização por padrão. Em execução pelo terminal, o endereço será `http://localhost:5080/swagger`, mas o navegador pode não abrir automaticamente. Para usar outra porta ou comportamento, altere o `launchSettings.json`.
+**Importante:** `appsettings.Development.json` está no `.gitignore`, pois contém credenciais. A chave JWT é necessária para o login e para testar endpoints protegidos, mas **não** é necessária para cadastrar usuários.
 
-## Login e permissões
+## Testar pelo Swagger — fluxo simples
 
-1. Swagger → `POST /api/auth/registrar`: `{"nome":"Aluno","email":"aluno@exemplo.com","password":"Senha123"}`.
-2. O cadastro sempre cria `Role=leitor`, sem autorização para alterar livros ou empréstimos.
-3. No Oracle, para usar a demonstração como admin, execute `UPDATE CP5_USUARIO SET ROLE='admin' WHERE EMAIL='aluno@exemplo.com'; COMMIT;`.
-4. Swagger → `POST /api/auth`: `{"email":"aluno@exemplo.com","senha":"Senha123"}`.
-5. Copie `Jwt` da resposta, clique em **Authorize** no Swagger e cole o token (sem prefixo `Bearer`).
-6. Teste `GET /api/livros`, `POST /api/livros`, empréstimos e `GET /api/endereco/{cep}`.
-7. Remova o token no Authorize e verifique resposta 401 em rota protegida.
+### 1. Criar administrador (sem token)
 
-**Nota didática de segurança**: para ficar alinhado ao código da Aula 08, a senha é comparada diretamente no repositório, conforme demonstrado pelo professor. Isso é inadequado para produção; não reutilize senhas reais. A funcionalidade de registro não permite escolher papel de administrador. A chave JWT e a senha Oracle não devem ir ao GitHub.
+**POST `/api/auth/registrar-admin`**
 
-## Organização
+```json
+{
+  "nome": "Joao",
+  "email": "joao@teste.com",
+  "password": "Joao123!"
+}
+```
 
-- `CP5.Domain`: entidades e interfaces, exceções, OperationResult.
-- `CP5.Application`: use cases, DTOs, paginação e JWT.
-- `CP5.Infrastructure`: EF Core, Oracle, repositories e ViaCEP via RestSharp.
-- `CP5.API`: controllers, Swagger, autenticação e autorização.
-- `CP5.Tests`: testes unitários xUnit/Moq (testes funcionais com Oracle ainda pendentes).
+Resposta esperada: **200 OK**, `role: "admin"`. Não exige JWT nem chave de instalação.
 
-## Testes
+### 2. Criar leitor (sem token)
+
+**POST `/api/auth/registrar`**
+
+```json
+{
+  "nome": "Ana",
+  "email": "ana@teste.com",
+  "password": "Ana123!"
+}
+```
+
+Resposta esperada: **200 OK**, `role: "leitor"`.
+
+### 3. Fazer login com Joao
+
+**POST `/api/auth`**
+
+```json
+{
+  "email": "joao@teste.com",
+  "senha": "Joao123!"
+}
+```
+
+Copie o campo `jwt` da resposta, clique em **Authorize** no Swagger e cole o token (sem prefixar `Bearer`).
+
+### 4. Cadastrar livro
+
+**POST `/api/livros`** com o JWT de Joao (admin):
+
+```json
+{
+  "id": 0,
+  "titulo": "Dom Casmurro",
+  "autor": "Machado de Assis",
+  "anoPublicacao": 1899
+}
+```
+
+Depois confira o registro no Oracle:
+
+```sql
+SELECT ID, NOME, EMAIL, ROLE FROM CP5_USUARIO;
+SELECT * FROM CP5_LIVRO;
+```
+
+**Teste de autorização:** ao fazer login com Ana (leitor) e tentar `POST /api/livros`, a API deve retornar **403 Forbidden**. Sem JWT, os endpoints protegidos devem retornar **401 Unauthorized**. A criação pública de admin é uma simplificação **somente para o exercício acadêmico**, não uma prática adequada para produção.
+
+## Endpoints
+
+- `POST /api/auth/registrar` — cria leitor, público.
+- `POST /api/auth/registrar-admin` — cria administrador, público.
+- `POST /api/auth` — login com JWT.
+- `GET/POST/PUT/DELETE /api/livros` — CRUD de livros; leitura/alteração conforme perfil.
+- `GET/POST/PUT/DELETE /api/emprestimos` — CRUD de empréstimos; leitura/alteração conforme perfil.
+- `GET /api/endereco/{cep}` — serviço externo ViaCEP.
+
+As consultas usam paginação e links HATEOAS.
+
+## Arquitetura e conceitos
+
+- `CP5.Domain`: entidades, interfaces e `OperationResult`.
+- `CP5.Application`: DTOs e UseCases.
+- `CP5.Infrastructure`: EF Core/Oracle, Repository e ViaCEP via RestSharp.
+- `CP5.API`: Controllers, JWT, Swagger e autorização por perfil.
+- `CP5.Tests`: testes xUnit/Moq com padrão Arrange, Act, Assert.
+
+A aplicação usa `OracleSQLCompatibility.DatabaseVersion19` para compatibilidade com o Oracle da FIAP e atributos `[Table]`/`[Column]` que mapeiam o modelo C# para os nomes das colunas Oracle.
+
+## Compilar e executar testes
 
 ```powershell
+dotnet build CP5.API/CP5.API.csproj
 dotnet test CP5.Tests/CP5.Tests.csproj
 ```
 
-**Validação pendente**: este pacote não foi compilado neste ambiente, pois não há SDK .NET instalado aqui. Antes de entregar é necessário compilar e testar localmente, corrigir erros caso ocorram e complementar os testes de integração exigidos pelo CP5. Não há banco SQLite nem novas tecnologias arquiteturais introduzidas.
+A compilação e execução dos testes precisam ser confirmadas no Visual Studio com .NET 8; os testes funcionais/de integração ainda precisam ser complementados para atender integralmente ao CP5.
 
 ## Entrega
-Vídeo demonstrativo (máximo 5 minutos): [INSERIR LINK]  
-Integrantes / RM: [PREENCHER]
+
+- Repositório público: [INSERIR LINK]
+- Vídeo de demonstração (máximo de 5 minutos): [INSERIR LINK]
+- Integrantes e RMs: [PREENCHER]

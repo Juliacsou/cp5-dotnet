@@ -5,27 +5,47 @@ using CP5.Domain.Entities;
 using CP5.Domain.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+
 namespace CP5.Application.UseCases;
+
 public class UserUseCase
 {
     private readonly IUserRepository _repository;
     private readonly IConfiguration _configuration;
+
     public UserUseCase(IUserRepository repository, IConfiguration configuration)
     {
-        _repository = repository; _configuration = configuration;
+        _repository = repository;
+        _configuration = configuration;
     }
+
+    // O cadastro anonimo nao recebe o perfil: sempre cria leitor.
     public async Task<UserEntity?> AdicionarAsync(string nome, string email, string senha)
     {
-        // Todo cadastro público recebe perfil leitor. Perfil admin somente por concessão no Oracle.
-        return await _repository.AdicionarAsync(new UserEntity { Nome=nome, Email=email, Password=senha, Role="leitor" });
+        return await _repository.AdicionarAsync(new UserEntity
+        {
+            Nome = nome, Email = email, Password = senha, Role = "leitor"
+        });
     }
+
+    // Cadastro de administrador via endpoint publico (exercicio academico).
+    public async Task<UserEntity?> AdicionarAdminAsync(string nome, string email, string senha)
+    {
+        return await _repository.AdicionarAsync(new UserEntity
+        {
+            Nome = nome, Email = email, Password = senha, Role = "admin"
+        });
+    }
+
     public async Task<string?> AutenticarAsync(string email, string senha)
     {
         var usuario = await _repository.AutenticarAsync(email, senha);
         if (usuario is null) return null;
+
         var secret = _configuration["Secretkey"]!;
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
-        var claims = new[] {
+        var claims = new[]
+        {
             new Claim(ClaimTypes.Name, usuario.Email),
             new Claim(ClaimTypes.Role, usuario.Role)
         };

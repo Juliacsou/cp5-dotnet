@@ -8,8 +8,6 @@ CREATE TABLE CP5_USUARIO (
     ROLE NVARCHAR2(20) DEFAULT 'leitor' NOT NULL,
     CONSTRAINT UK_CP5_USUARIO_EMAIL UNIQUE (EMAIL)
 );
--- Após cadastrar seu usuário pelo Swagger, conceda perfil de administração
--- ao seu próprio email de teste, substituindo o valor abaixo:
--- UPDATE CP5_USUARIO SET ROLE='admin' WHERE EMAIL='seu.email@exemplo.com';
--- COMMIT;
--- Faça login novamente para receber um JWT atualizado com role admin.
+-- Administradores sao criados via POST /api/auth/registrar-admin, sem JWT.
+-- Leitores sao criados via POST /api/auth/registrar, tambem sem JWT.
+-- Nao e necessario alterar ROLE manualmente para testar pelo Swagger.
